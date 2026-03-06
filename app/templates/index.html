@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Expense Claim</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f0f4f8; color: #1a202c; min-height: 100vh; }
+    header { background: #2b6cb0; color: #fff; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #2b6cb0; border-bottom: 1px solid #e2e8f0; padding-bottom: .5rem; }
+
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem; }
+    .form-group { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: .25rem; }
+    label { font-size: .85rem; font-weight: 500; color: #4a5568; }
+    input, select, textarea {
+      padding: .5rem .75rem; border: 1px solid #cbd5e0; border-radius: 6px;
+      font-size: .95rem; width: 100%; transition: border-color .2s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66,153,225,.2); }
+    textarea { resize: vertical; min-height: 70px; }
+
+    .btn { padding: .55rem 1.25rem; border: none; border-radius: 6px; font-size: .9rem; font-weight: 600; cursor: pointer; transition: background .2s; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { background: #2c5282; }
+    .btn-secondary { background: #edf2f7; color: #4a5568; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-success { background: #276749; color: #fff; }
+    .btn-success:hover { background: #22543d; }
+    .btn-danger { background: #c53030; color: #fff; }
+    .btn-danger:hover { background: #9b2c2c; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+
+    .upload-area {
+      border: 2px dashed #a0aec0; border-radius: 8px; padding: 2rem;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .upload-area:hover, .upload-area.drag-over { border-color: #4299e1; background: #ebf8ff; }
+    .upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-area .upload-icon { font-size: 2rem; margin-bottom: .5rem; }
+    .upload-area p { color: #718096; font-size: .9rem; }
+    .upload-area .file-name { color: #2b6cb0; font-weight: 600; margin-top: .5rem; }
+
+    .badge {
+      display: inline-block; padding: .2rem .6rem; border-radius: 9999px;
+      font-size: .78rem; font-weight: 600;
+    }
+    .badge-draft { background: #e2e8f0; color: #4a5568; }
+    .badge-submitted { background: #c6f6d5; color: #276749; }
+    .badge-flagged { background: #fed7d7; color: #c53030; }
+
+    .alert { padding: .75rem 1rem; border-radius: 6px; margin-bottom: .75rem; font-size: .9rem; }
+    .alert-success { background: #c6f6d5; color: #276749; border: 1px solid #9ae6b4; }
+    .alert-error { background: #fed7d7; color: #c53030; border: 1px solid #fc8181; }
+    .alert-info { background: #bee3f8; color: #2b6cb0; border: 1px solid #90cdf4; }
+    .alert-warning { background: #fefcbf; color: #744210; border: 1px solid #f6e05e; }
+
+    .expense-list { list-style: none; }
+    .expense-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .75rem 1rem; border: 1px solid #e2e8f0; border-radius: 6px;
+      margin-bottom: .5rem; cursor: pointer; transition: background .15s;
+    }
+    .expense-item:hover { background: #f7fafc; }
+    .expense-item .meta { font-size: .82rem; color: #718096; }
+
+    .flag-tag {
+      display: inline-block; background: #fed7d7; color: #c53030;
+      border-radius: 4px; font-size: .75rem; padding: .1rem .45rem; margin-left: .25rem;
+    }
+
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: .4rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+    #messages { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+<header>
+  <span style="font-size:1.6rem">🧾</span>
+  <h1>AI Expense Claim</h1>
+</header>
+
+<main>
+  <div id="messages"></div>
+
+  <!-- Step 1: Upload Receipt -->
+  <div class="card" id="step-upload">
+    <h2>Step 1 — Upload Receipt</h2>
+    <div class="upload-area" id="uploadArea">
+      <div class="upload-icon">📄</div>
+      <p>Drag &amp; drop your receipt here, or <strong>click to browse</strong></p>
+      <p style="margin-top:.3rem;font-size:.8rem">Supported: PDF, JPG, PNG (max 16 MB)</p>
+      <p class="file-name hidden" id="selectedFileName"></p>
+      <input type="file" id="receiptFile" accept=".pdf,.jpg,.jpeg,.png" />
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnUpload" disabled>Upload Receipt</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Extracted Data Review -->
+  <div class="card hidden" id="step-review">
+    <h2>Step 2 — Review &amp; Edit Extracted Data</h2>
+    <p id="extractionStatus" style="font-size:.88rem;margin-bottom:1rem;color:#718096"></p>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="vendor">Vendor / Merchant <span id="flagVendor" class="flag-tag hidden">⚠ needs review</span></label>
+        <input type="text" id="vendor" placeholder="e.g. Acme Supplies Ltd" />
+      </div>
+      <div class="form-group">
+        <label for="transactionDate">Transaction Date <span id="flagDate" class="flag-tag hidden">⚠ needs review</span></label>
+        <input type="date" id="transactionDate" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="amount">Amount <span id="flagAmount" class="flag-tag hidden">⚠ needs review</span></label>
+        <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" />
+      </div>
+      <div class="form-group">
+        <label for="taxAmount">Tax Amount</label>
+        <input type="number" id="taxAmount" step="0.01" min="0" placeholder="0.00" />
+      </div>
+      <div class="form-group">
+        <label for="currency">Currency</label>
+        <select id="currency">
+          <option value="GBP">GBP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="AUD">AUD</option>
+          <option value="CAD">CAD</option>
+          <option value="JPY">JPY</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="expenseType">Expense Type</label>
+        <select id="expenseType">
+          <option value="">— select —</option>
+          <option value="travel">Travel</option>
+          <option value="meals">Meals</option>
+          <option value="accommodation">Accommodation</option>
+          <option value="equipment">Equipment</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:2">
+        <label for="description">Description</label>
+        <input type="text" id="description" placeholder="Brief description of the expense" />
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnSaveEdits">Save Changes</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Job Association -->
+  <div class="card hidden" id="step-job">
+    <h2>Step 3 — Associate with Job</h2>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label for="jobSelect">Select Job</label>
+        <select id="jobSelect">
+          <option value="">— select a job —</option>
+        </select>
+      </div>
+    </div>
+    <div id="jobDetails" class="hidden" style="font-size:.88rem;color:#4a5568;margin-top:.5rem;padding:.75rem;background:#f7fafc;border-radius:6px"></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnAssignJob" disabled>Assign Job</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Validate & Submit -->
+  <div class="card hidden" id="step-submit">
+    <h2>Step 4 — Validate &amp; Submit</h2>
+    <div id="validationResults"></div>
+    <div class="actions">
+      <button class="btn btn-secondary" id="btnValidate">Validate</button>
+      <button class="btn btn-success" id="btnSubmit" disabled>Submit Expense</button>
+    </div>
+  </div>
+
+  <!-- Expense List -->
+  <div class="card">
+    <h2>My Expenses</h2>
+    <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="loadExpenses()">Refresh</button>
+      <button class="btn btn-primary" onclick="startNewExpense()">+ New Expense</button>
+    </div>
+    <ul class="expense-list" id="expenseList">
+      <li style="color:#a0aec0;font-size:.9rem">Loading…</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+/* =====================================================================
+   State
+   ===================================================================== */
+let currentExpenseId = null;
+let currentJobId = null;
+
+/* =====================================================================
+   Utilities
+   ===================================================================== */
+function msg(html, type = 'info') {
+  const el = document.getElementById('messages');
+  el.innerHTML = `<div class="alert alert-${type}" style="margin-bottom:.75rem">${html}</div>`;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearMsg() { document.getElementById('messages').innerHTML = ''; }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function fmt(val, prefix = '') { return val != null ? `${prefix}${parseFloat(val).toFixed(2)}` : '—'; }
+function fmtDate(d) { return d ? new Date(d + 'T00:00:00').toLocaleDateString('en-GB') : '—'; }
+
+async function api(method, path, body, isForm = false) {
+  const opts = { method, headers: {} };
+  if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  else if (body && isForm) { opts.body = body; }
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, data };
+  return data;
+}
+
+/* =====================================================================
+   Upload
+   ===================================================================== */
+const uploadArea = document.getElementById('uploadArea');
+const receiptFile = document.getElementById('receiptFile');
+const btnUpload = document.getElementById('btnUpload');
+const selectedFileName = document.getElementById('selectedFileName');
+
+receiptFile.addEventListener('change', () => {
+  if (receiptFile.files.length) {
+    selectedFileName.textContent = receiptFile.files[0].name;
+    selectedFileName.classList.remove('hidden');
+    btnUpload.disabled = false;
+  }
+});
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault(); uploadArea.classList.remove('drag-over');
+  receiptFile.files = e.dataTransfer.files;
+  receiptFile.dispatchEvent(new Event('change'));
+});
+
+btnUpload.addEventListener('click', async () => {
+  if (!receiptFile.files.length) return;
+  btnUpload.innerHTML = '<span class="spinner"></span>Uploading…';
+  btnUpload.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('file', receiptFile.files[0]);
+    if (currentExpenseId) fd.append('expense_id', currentExpenseId);
+    const res = await api('POST', '/api/receipts/upload', fd, true);
+    currentExpenseId = res.expense.id;
+    msg('✅ Receipt uploaded successfully. Extracting data…', 'success');
+    await extractData();
+  } catch (e) {
+    const errMsg = e.data?.error || 'Upload failed.';
+    msg(`❌ ${errMsg}`, 'error');
+    btnUpload.disabled = false;
+    btnUpload.textContent = 'Upload Receipt';
+  }
+});
+
+/* =====================================================================
+   Extract
+   ===================================================================== */
+async function extractData() {
+  try {
+    const res = await api('POST', `/api/receipts/${currentExpenseId}/extract`);
+    const exp = res.expense;
+    populateReviewForm(exp);
+    show('step-review');
+    show('step-job');
+    show('step-submit');
+    loadJobs();
+    loadExpenses();
+    msg('✅ Data extracted. Please review and edit if needed.', 'success');
+  } catch (e) {
+    msg(`⚠️ Extraction failed: ${e.data?.error || 'Unknown error'}. You can enter details manually.`, 'warning');
+    show('step-review');
+    show('step-job');
+    show('step-submit');
+    loadJobs();
+  }
+}
+
+function populateReviewForm(exp) {
+  document.getElementById('vendor').value = exp.vendor || '';
+  document.getElementById('transactionDate').value = exp.transaction_date || '';
+  document.getElementById('amount').value = exp.amount != null ? exp.amount : '';
+  document.getElementById('taxAmount').value = exp.tax_amount != null ? exp.tax_amount : '';
+  const curr = document.getElementById('currency');
+  curr.value = exp.currency || 'GBP';
+  document.getElementById('expenseType').value = exp.expense_type || '';
+  document.getElementById('description').value = exp.description || '';
+
+  const flags = exp.extraction_flags || [];
+  document.getElementById('flagVendor').classList.toggle('hidden', !flags.includes('vendor'));
+  document.getElementById('flagDate').classList.toggle('hidden', !flags.includes('transaction_date'));
+  document.getElementById('flagAmount').classList.toggle('hidden', !flags.includes('amount'));
+
+  const statusEl = document.getElementById('extractionStatus');
+  if (flags.length) {
+    statusEl.textContent = `⚠ ${flags.length} field(s) could not be extracted with confidence and are flagged for review.`;
+    statusEl.style.color = '#c05621';
+  } else {
+    statusEl.textContent = '✓ All fields extracted successfully. Please verify the values below.';
+    statusEl.style.color = '#276749';
+  }
+}
+
+/* =====================================================================
+   Save Edits (AC-3)
+   ===================================================================== */
+document.getElementById('btnSaveEdits').addEventListener('click', async () => {
+  const btn = document.getElementById('btnSaveEdits');
+  btn.innerHTML = '<span class="spinner"></span>Saving…';
+  btn.disabled = true;
+  try {
+    const payload = {
+      vendor: document.getElementById('vendor').value,
+      transaction_date: document.getElementById('transactionDate').value || null,
+      amount: document.getElementById('amount').value ? parseFloat(document.getElementById('amount').value) : null,
+      tax_amount: document.getElementById('taxAmount').value ? parseFloat(document.getElementById('taxAmount').value) : null,
+      currency: document.getElementById('currency').value,
+      expense_type: document.getElementById('expenseType').value || null,
+      description: document.getElementById('description').value || null,
+    };
+    await api('PUT', `/api/expenses/${currentExpenseId}`, payload);
+    msg('✅ Changes saved.', 'success');
+  } catch (e) {
+    msg(`❌ Save failed: ${e.data?.error || 'Unknown error'}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+});
+
+/* =====================================================================
+   Job Association (AC-4)
+   ===================================================================== */
+async function loadJobs() {
+  try {
+    const jobs = await api('GET', '/api/jobs/?active_only=true');
+    const sel = document.getElementById('jobSelect');
+    sel.innerHTML = '<option value="">— select a job —</option>';
+    jobs.forEach(j => {
+      const opt = document.createElement('option');
+      opt.value = j.id;
+      opt.textContent = `${j.name} (${j.client})`;
+      sel.appendChild(opt);
+    });
+  } catch (_) {}
+}
+
+document.getElementById('jobSelect').addEventListener('change', function () {
+  document.getElementById('btnAssignJob').disabled = !this.value;
+  if (this.value) showJobDetails(this.value);
+  else document.getElementById('jobDetails').classList.add('hidden');
+});
+
+async function showJobDetails(jobId) {
+  try {
+    const job = await api('GET', `/api/jobs/${jobId}`);
+    const el = document.getElementById('jobDetails');
+    el.innerHTML = `
+      <strong>${job.name}</strong> — ${job.client}<br/>
+      Period: ${fmtDate(job.start_date)} – ${fmtDate(job.end_date)}<br/>
+      Allowed types: ${job.allowed_expense_types.join(', ')}<br/>
+      ${job.max_amount ? `Max amount: ${job.currency} ${fmt(job.max_amount)}` : 'No amount limit'}
+    `;
+    el.classList.remove('hidden');
+  } catch (_) {}
+}
+
+document.getElementById('btnAssignJob').addEventListener('click', async () => {
+  const jobId = document.getElementById('jobSelect').value;
+  if (!jobId) return;
+  const btn = document.getElementById('btnAssignJob');
+  btn.innerHTML = '<span class="spinner"></span>Assigning…';
+  btn.disabled = true;
+  try {
+    await api('PUT', `/api/expenses/${currentExpenseId}`, { job_id: parseInt(jobId) });
+    currentJobId = parseInt(jobId);
+    msg('✅ Job assigned successfully.', 'success');
+  } catch (e) {
+    msg(`❌ ${e.data?.error || 'Failed to assign job.'}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Assign Job';
+  }
+});
+
+/* =====================================================================
+   Validate & Submit (AC-7 / AC-8)
+   ===================================================================== */
+document.getElementById('btnValidate').addEventListener('click', async () => {
+  const btn = document.getElementById('btnValidate');
+  btn.innerHTML = '<span class="spinner"></span>Validating…';
+  btn.disabled = true;
+  try {
+    const res = await api('POST', `/api/expenses/${currentExpenseId}/validate`);
+    const el = document.getElementById('validationResults');
+    if (res.valid) {
+      el.innerHTML = '<div class="alert alert-success" style="margin-bottom:.75rem">✅ All validations passed. Ready to submit.</div>';
+      document.getElementById('btnSubmit').disabled = false;
+    } else {
+      const errHtml = res.errors.map(e => `<li>${e}</li>`).join('');
+      el.innerHTML = `<div class="alert alert-error" style="margin-bottom:.75rem"><strong>⚠ Validation failed:</strong><ul style="margin-top:.5rem;padding-left:1.25rem">${errHtml}</ul></div>`;
+      document.getElementById('btnSubmit').disabled = true;
+    }
+  } catch (e) {
+    msg(`❌ Validation error: ${e.data?.error || 'Unknown error'}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Validate';
+  }
+});
+
+document.getElementById('btnSubmit').addEventListener('click', async () => {
+  if (!confirm('Are you sure you want to submit this expense?')) return;
+  const btn = document.getElementById('btnSubmit');
+  btn.innerHTML = '<span class="spinner"></span>Submitting…';
+  btn.disabled = true;
+  try {
+    const res = await api('POST', `/api/expenses/${currentExpenseId}/submit`);
+    msg('🎉 Expense submitted successfully! Reference: #' + res.expense.id, 'success');
+    loadExpenses();
+    // Reset to allow new expense
+    setTimeout(() => {
+      startNewExpense();
+      clearMsg();
+    }, 3000);
+  } catch (e) {
+    const errs = e.data?.errors || [];
+    const errHtml = errs.length
+      ? '<ul style="margin-top:.5rem;padding-left:1.25rem">' + errs.map(e => `<li>${e}</li>`).join('') + '</ul>'
+      : '';
+    document.getElementById('validationResults').innerHTML =
+      `<div class="alert alert-error" style="margin-bottom:.75rem"><strong>❌ ${e.data?.error || 'Submission failed.'}</strong>${errHtml}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Submit Expense';
+  }
+});
+
+/* =====================================================================
+   Expense List
+   ===================================================================== */
+async function loadExpenses() {
+  try {
+    const expenses = await api('GET', '/api/expenses/');
+    const ul = document.getElementById('expenseList');
+    if (!expenses.length) {
+      ul.innerHTML = '<li style="color:#a0aec0;font-size:.9rem">No expenses yet.</li>';
+      return;
+    }
+    ul.innerHTML = expenses.map(e => `
+      <li class="expense-item" onclick="viewExpense(${e.id})">
+        <div>
+          <strong>${e.vendor || '(No vendor)'}</strong>
+          <span class="badge badge-${e.status}" style="margin-left:.5rem">${e.status}</span>
+          ${e.extraction_flags && e.extraction_flags.length ? '<span class="badge badge-flagged" style="margin-left:.25rem">⚠ flagged</span>' : ''}
+          <div class="meta">
+            ${fmtDate(e.transaction_date)} &bull;
+            ${e.currency} ${fmt(e.amount)} &bull;
+            ${e.job ? e.job.name : 'No job'}
+          </div>
+        </div>
+        <div style="font-size:.8rem;color:#a0aec0">#${e.id}</div>
+      </li>
+    `).join('');
+  } catch (_) {}
+}
+
+function viewExpense(expenseId) {
+  window.open(`/api/expenses/${expenseId}`, '_blank');
+}
+
+/* =====================================================================
+   New Expense
+   ===================================================================== */
+function startNewExpense() {
+  currentExpenseId = null;
+  currentJobId = null;
+  receiptFile.value = '';
+  selectedFileName.classList.add('hidden');
+  selectedFileName.textContent = '';
+  btnUpload.disabled = true;
+  btnUpload.textContent = 'Upload Receipt';
+  hide('step-review');
+  hide('step-job');
+  hide('step-submit');
+  document.getElementById('validationResults').innerHTML = '';
+  document.getElementById('btnSubmit').disabled = true;
+  clearMsg();
+}
+
+/* =====================================================================
+   Init
+   ===================================================================== */
+loadExpenses();
+</script>
+</body>
+</html>
