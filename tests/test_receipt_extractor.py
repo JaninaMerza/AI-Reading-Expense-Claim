@@ -177,7 +177,9 @@ def test_extract_receipt_data_from_text_file(tmp_path):
     currency, _ = _extract_currency(text)
 
     assert vendor == "THE COFFEE HOUSE"
-    assert date_ is not None and date_.month == 3 and date_.day == 12
+    assert date_ is not None
+    assert date_.month == 3
+    assert date_.day == 12
     assert amount == pytest.approx(10.20)
     assert tax == pytest.approx(1.70)
     assert currency == "GBP"
